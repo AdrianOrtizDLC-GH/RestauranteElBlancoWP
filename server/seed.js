@@ -1,17 +1,122 @@
-require('dotenv').config();
-const bcrypt=require('bcryptjs'); const db=require('./db');
-const email=process.env.ADMIN_EMAIL||'admin@restaurante.local'; const password=process.env.ADMIN_PASSWORD||'admin123';
-const hash=bcrypt.hashSync(password,12);
-db.prepare('INSERT OR IGNORE INTO admins(email,password_hash) VALUES(?,?)').run(email,hash);
-const count=db.prepare('SELECT COUNT(*) c FROM menu_items').get().c;
-if(!count){
- const items=[
- ['Entrantes','Rabas','Rabas de calamar crujientes','13.50'],['Entrantes','Croquetas caseras','Selección cremosa de croquetas','11.50'],['Entrantes','Zamburiñas','Zamburiñas a la plancha','19.00'],
- ['Pescados','Merluza en salsa verde','Merluza fresca con salsa verde','19.00'],['Pescados','Pescado del día','Según lonja y temporada','sugerencia'],
- ['Carnes','Entrecot','Entrecot de vaca a la parrilla','21.00'],['Carnes','Solomillo de ternera','Solomillo con guarnición','25.00'],
- ['Postres','Tarta de queso','Tarta cremosa de la casa','6.50'],['Postres','Postre del día','Elaboración casera','6.00']
- ];
- const ins=db.prepare('INSERT INTO menu_items(category,name,description,price,image) VALUES(?,?,?,?,?)');
- for(const x of items){const price=x[3]==='sugerencia'?0:Number(x[3]);ins.run(x[0],x[1],x[2],price,'');}
+const bcrypt = require('bcryptjs');
+const db = require('./db');
+
+console.log('✓ Base de datos conectada');
+
+// ==================== ADMIN ====================
+
+const adminEmail = 'admin@restaurante.local';
+const adminPassword = 'admin123';
+
+const passwordHash = bcrypt.hashSync(adminPassword, 10);
+
+const existingAdmin = db
+  .prepare('SELECT id FROM admins WHERE email = ?')
+  .get(adminEmail);
+
+if (!existingAdmin) {
+  db.prepare(`
+    INSERT INTO admins (email, password_hash)
+    VALUES (?, ?)
+  `).run(adminEmail, passwordHash);
+
+  console.log(`✓ Administrador creado: ${adminEmail}`);
+} else {
+  console.log(`✓ Administrador ya existe: ${adminEmail}`);
 }
-console.log(`Admin: ${email} / ${password}`);
+
+// ==================== CARTA ====================
+
+const menuCount = db
+  .prepare('SELECT COUNT(*) AS count FROM menu_items')
+  .get().count;
+
+if (menuCount === 0) {
+  const menuItems = [
+    {
+      category: 'Entrantes',
+      name: 'Rabas de Cantabria',
+      description: 'Rabas tiernas y crujientes.',
+      price: 14
+    },
+    {
+      category: 'Entrantes',
+      name: 'Croquetas caseras',
+      description: 'Croquetas cremosas de elaboración casera.',
+      price: 12
+    },
+    {
+      category: 'Entrantes',
+      name: 'Ensalada de temporada',
+      description: 'Producto fresco de temporada.',
+      price: 11
+    },
+    {
+      category: 'Pescados',
+      name: 'Pescado del día',
+      description: 'Pescado fresco según mercado.',
+      price: null
+    },
+    {
+      category: 'Pescados',
+      name: 'Merluza a la plancha',
+      description: 'Merluza fresca con guarnición.',
+      price: 22
+    },
+    {
+      category: 'Carnes',
+      name: 'Entrecot de vaca',
+      description: 'Entrecot a la parrilla con patatas.',
+      price: 24
+    },
+    {
+      category: 'Carnes',
+      name: 'Solomillo',
+      description: 'Solomillo de vaca a la parrilla.',
+      price: 25
+    },
+    {
+      category: 'Postres',
+      name: 'Tarta de queso',
+      description: 'Tarta de queso cremosa de la casa.',
+      price: 7
+    },
+    {
+      category: 'Postres',
+      name: 'Arroz con leche',
+      description: 'Arroz con leche tradicional.',
+      price: 6
+    }
+  ];
+
+  const insertMenu = db.prepare(`
+    INSERT INTO menu_items
+      (category, name, description, price, active)
+    VALUES (?, ?, ?, ?, 1)
+  `);
+
+  const insertMany = db.transaction((items) => {
+    for (const item of items) {
+      insertMenu.run(
+        item.category,
+        item.name,
+        item.description,
+        item.price
+      );
+    }
+  });
+
+  insertMany(menuItems);
+
+  console.log(`✓ Carta creada: ${menuItems.length} platos`);
+} else {
+  console.log(`✓ La carta ya contiene ${menuCount} platos`);
+}
+
+console.log('');
+console.log('================================');
+console.log('       SEED COMPLETADO');
+console.log('================================');
+console.log('');
+console.log(`Admin: ${adminEmail}`);
+console.log(`Password: ${adminPassword}`);
